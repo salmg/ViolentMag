@@ -1,8 +1,7 @@
 #!/usr/bin/python
 # 
 # Integrated and modified by Salvador Mendoza (salmg.net)
-# March 28, 2017
-#
+# 
 # A combination of cab.py + cmsb.py + dmsb.py from http://alcrypto.co.uk/magstripe/
 #  - Create Aiken Biphase 
 #  - Create MagStripe Binary
@@ -16,9 +15,11 @@
 #
 #		-t [Track #[1-3]] | default:1>
 #		-c <data>
+#       -b [<second track data>]
 #		-z [# of zeros | default:20] 
 #		-s [samples per bit | default:15]
 #		-f [wav filename | if not specified, only creates/shows MagStripe Binary code]
+#       -r <mimic swiped back and forth-only for track2(;)>
 #               
 #	To decode Magstripe binary:
 #		-d [data]
@@ -97,7 +98,7 @@
 # version 0.2:
 #	fix end sentinel search
 
-from wave import open
+from wave import open as openw
 from struct import pack
 from operator import xor
 from optparse import OptionParser
@@ -105,20 +106,24 @@ from optparse import OptionParser
 bits = 7
 base = 32
 max = 63
-padding = frequency = data = filen = None
+reversem = padding = frequency = card = card2 = filen = trackp = None
+
 
 def main():
-    global bits, base, max, padding, frequency, data, filen
+    global bits, base, max, padding, frequency, card, filen, listOuti, reversem, card2
     parser = OptionParser('Usage: \n\t'+ __file__ + ' <parameters>:' +\
       '\n\n\tTo encode mag-stripe:\n\t\t-t [Track #[1-3]] | default:1>' +\
       '\n\t\t-c <data>\n\t\t-z [# of zeros | default:20] '+\
       '\n\t\t-s [samples per bit | default:15]'+\
       '\n\t\t-f [wav filename | if not specified, only shows binary encode]\n\n' +\
+      '\n\t\t-r [reverse magstripe | default:0]'+\
       '\n\tTo decode Magstripe binary:\n\t\t-d [data]\n')
     parser.add_option('-t', dest='tr', type='string',\
       help='specify track number')
-    parser.add_option('-c', dest='da', type='string',\
+    parser.add_option('-c', dest='da1', type='string',\
       help='data for the track')
+    parser.add_option('-b', dest='da2', type='string',\
+      help='data for the track 2')
     parser.add_option('-z', dest='ze', type='string',\
       help='specify number of leading zeros')
     parser.add_option('-s', dest='sa', type='string',\
@@ -127,32 +132,47 @@ def main():
       help='File name')
     parser.add_option('-d', dest='mb', type='string',\
       help='MagStripe Binary')
+    parser.add_option('-r', dest='re', type='string',\
+      help='Reverse MagStripe')
     (options, args) = parser.parse_args()
     
     trackp = options.tr
-    data = options.da
+    card = options.da1
+    card2 = options.da2
+
     padding = options.ze
     frequency = options.sa
     filen = options.fi
+    reversem = options.re
     
     if options.mb != None:
         decodeMagbinary(options.mb)
     else:
-        if data == None:
+        if card == None:
             print parser.usage
             exit(0)
 
-        padding = int(padding) if padding != None else 20
+        padding = int(padding) if padding != None else 25
         frequency = int(frequency) if frequency != None else 15
+        reversem = int(reversem) if reversem != None else 0
+        card2 = card2 if card2 != None else ''
 
         if trackp != None:
             if trackp == '2' or trackp == '3':
-                bits = 5
-                base = 48
-                max = 15
-                
+                changeTrack(2)
         GenerateWav()
-            
+        
+def changeTrack(num):
+    #print num
+    global bits, base, max
+    bits = 7
+    base = 32
+    max = 63
+    if num == 2 or num == 3:
+        bits = 5
+        base = 48
+        max = 15
+    
 def decodeMagbinary(data):
     # check for IATA data - find start sentinel
     start_decode = data.find("1010001")
@@ -206,18 +226,23 @@ def decodeMagbinary(data):
     print "result:"
     print decoded_string
     
-def GenerateWav():
-    global data, trackp
-    zero = ''
+def encodeMag(d1):
+    data = d1
     lrc = []
     output = ''
+    #Check what track
+    if data[:1] == '%':
+        changeTrack(1)
+    else:
+        changeTrack(2)
+        
     for x in range(bits):
-        zero += "0"
+        #zero += "0"
         lrc.append(0)
     
     for x in range(padding):
-        output += zero
-
+        output += '0'
+    
     for x in range( len(data) ):
         raw = ord(data[x]) - base
         if raw < 0 or raw > max:
@@ -225,7 +250,9 @@ def GenerateWav():
             exit(0)
             
         parity = 1
-        for y in range(bits-1):
+        for y in range(bits-1): 
+            #raw >> y & 1 : (raw >> y) shift the x bits to the right by 'y' places
+            #  & 1 : each bit of the output is 1 if the corresponding bit is 1, otherwise it's 0.
             output += str(raw >> y & 1)
             parity += raw >> y & 1
             lrc[y] = xor(lrc[y], raw >> y & 1)
@@ -239,41 +266,54 @@ def GenerateWav():
         
     output += chr((parity % 2) + ord('0'))
     for x in range(padding):
-        output += zero
+        output += '0'
     #Finishing first part of the code:
-    print output
-    
+    return output
+
+def GenerateWav():
+    data = encodeMag(card)
     #Second part:
     if filen == None:
         exit(0)
     else:
         print "Creating wav file: " + filen
-        newtrack=open(filen,"w")
+        newtrack=openw(filen,"w")
         params= (1, 2, 22050, 0L, 'NONE', 'not compressed')
         newtrack.setparams(params)
-        data = output
-
+        tmp = ''
         peak = 32767
-        for x in range(20):
-            newtrack.writeframes(pack("h",0))
 
         # write the actual data
         # square wave for now
-        n = 0
-        writedata = peak
-        while n < len(data):
-            if data[n] == '1':
-                for x in range(2):
-                    writedata = -writedata
-                    for y in range(frequency/4):
-                        newtrack.writeframes(pack("h",writedata))
+        for x in range(2):
+            #print x
+            n = 0
+            writedata = peak
+            while n < len(data):
+                if data[n] == '1':
+                    for x in range(2):
+                        writedata = -writedata
+                        for y in range(frequency/4):
+                            newtrack.writeframes(pack("h",writedata))
 
-            if data[n] == '0':
-                writedata = -writedata
-                for y in range(frequency/2):
-                    newtrack.writeframes(pack("h",writedata))
-            n = n + 1
+                if data[n] == '0':
+                    writedata = -writedata
+                    for y in range(frequency/2):
+                        newtrack.writeframes(pack("h",writedata))
+                n = n + 1
+            #print tmp
+            tmp = tmp + data
+
+            if card2 != '':
+                if card2[:1] == ';':
+                    data = encodeMag(card2)
+            else:
+                if reversem == 0 or card[:1] != ';':
+                    break
+            data = data[::-1]
+        print tmp        
         newtrack.close()
         print "Done"
+        
 if __name__ == '__main__':
     main()
