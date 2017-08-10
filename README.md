@@ -12,7 +12,7 @@ Integrating some Major Malfunction tools for Mag-stripe info:
 		-z [# of zeros | default:20] 
 		-s [samples per bit | default:15]
 		-f [wav filename | if not specified, only creates/shows MagStripe Binary code]
-                -r <mimic swiped back and forth-only for track2(;)>
+		-r <mimic swiped back and forth-only for track2(;)>
 		
 	To decode Magstripe binary:
 		-d [data]
