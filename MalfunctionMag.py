@@ -13,7 +13,7 @@
 #
 #	To encode mag-stripe:
 #
-#		-t [Track #[1-3]] | default:1>
+#       -t [Track #[1-3]] | default:1>
 #		-c <data>
 #       -b [<second track data>]
 #		-z [# of zeros | default:20] 
