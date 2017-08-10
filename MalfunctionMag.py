@@ -13,13 +13,13 @@
 #
 #	To encode mag-stripe:
 #
-#       -t [Track #[1-3]] | default:1>
+#		-t [Track #[1-3]] | default:1>
 #		-c <data>
-#       -b [<second track data>]
+#		-b [<second track data>]
 #		-z [# of zeros | default:20] 
 #		-s [samples per bit | default:15]
 #		-f [wav filename | if not specified, only creates/shows MagStripe Binary code]
-#       -r <mimic swiped back and forth-only for track2(;)>
+#		-r <mimic swiped back and forth-only for track2(;)>
 #               
 #	To decode Magstripe binary:
 #		-d [data]
